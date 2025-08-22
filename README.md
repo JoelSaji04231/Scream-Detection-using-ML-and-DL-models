@@ -66,16 +66,3 @@ The project is organized into **two main files**:
   - Spectrograms and Mel-spectrograms
   - MFCC features and their statistics
 
----
-
-## Requirements
-
-- Python 3.8+
-- Libraries:
-  - `numpy`
-  - `pandas`
-  - `scikit-learn`
-  - `matplotlib`
-  - `librosa`
-
----

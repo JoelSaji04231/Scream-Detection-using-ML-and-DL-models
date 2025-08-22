@@ -4,30 +4,78 @@
 
 It demonstrates the application of supervised learning techniques to help build intelligent safety systems that can automatically detect and report suspicious activities based on structured input data.
 
-The goal is to detect whether a given instance represents a crime or not, using features extracted from real-world sources such as audio signals, event logs, or contextual indicators.  
-The project includes **data preprocessing**, **dimensionality reduction**, **model training**, and **performance evaluation**.
+The goal is to detect whether a given instance represents a crime or not, using features extracted from real-world sources such as audio signals, event logs, or contextual indicators.
+
+---
+
+## Project Structure
+
+The project is organized into **two main files**:
+
+1. **Analytics File**
+   - Performs detailed analysis of the audio dataset.
+   - Generates and visualizes:
+     - Frequency of **scream** and **non-scream** events
+     - Spectrograms for both scream and non-scream audio
+     - Mel-spectrograms
+     - MFCC (Mel-Frequency Cepstral Coefficients)
+     - Mean, standard deviation, and absolute differences of MFCCs  
+   - Helps in understanding the audio characteristics before model training.
+
+2. **ML File**
+   - Focuses on **machine learning workflow**:
+     - Data preprocessing using `StandardScaler`
+     - Feature extraction from audio signals (MFCCs, mean, std, etc.)
+     - Model training using:
+       - Random Forest
+       - Support Vector Machine (SVM)
+       - Logistic Regression
+     - Performance evaluation using:
+       - `accuracy_score`
+       - `classification_report`  
+   - Provides the final predictions and metrics for crime detection.
 
 ---
 
 ## Project Workflow
 
 ### 1. Data Preprocessing
-- Clean and scale the input data using `StandardScaler`.
+- Clean, normalize, and scale the input features using `StandardScaler`.
 
-### 2. Dimensionality Reduction
-- Apply **Principal Component Analysis (PCA)** to reduce noise and improve model performance.
+### 2. Feature Extraction
+- Extract meaningful audio features:
+  - MFCCs
+  - Mean and standard deviation
+  - Absolute differences between MFCCs
+  - Spectrogram and Mel-spectrogram representations
 
 ### 3. Model Training
-Train and evaluate three classifiers:
-- Random Forest
-- Support Vector Machine (SVM)
-- Logistic Regression
+- Train multiple classifiers on the processed dataset:
+  - Random Forest
+  - Support Vector Machine (SVM)
+  - Logistic Regression
 
 ### 4. Evaluation
-- Use `accuracy_score` and `classification_report` to evaluate each model’s performance on test data.
+- Measure model performance on test data using:
+  - Accuracy
+  - Precision, recall, and F1-score (via `classification_report`)
 
 ### 5. Visualization
-- Use `matplotlib` to plot:
-  - PCA-transformed feature distributions
-  - Model performance metrics
+- Plot and visualize:
+  - Frequency of scream vs non-scream
+  - Spectrograms and Mel-spectrograms
+  - MFCC features and their statistics
 
+---
+
+## Requirements
+
+- Python 3.8+
+- Libraries:
+  - `numpy`
+  - `pandas`
+  - `scikit-learn`
+  - `matplotlib`
+  - `librosa`
+
+---

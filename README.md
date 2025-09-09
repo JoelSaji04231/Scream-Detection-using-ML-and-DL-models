@@ -4,7 +4,7 @@
 
 It demonstrates the application of supervised learning techniques to help build intelligent safety systems that can automatically detect and report suspicious activities based on structured input data.
 
-The goal is to detect whether a given instance represents a crime or not, using features extracted from real-world sources such as audio signals, event logs, or contextual indicators.
+The goal is to detect whether a given instance represents a crime or not, using features extracted from real-world sources like audio signals.
 
 ---
 

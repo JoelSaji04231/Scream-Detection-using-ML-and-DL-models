@@ -272,6 +272,11 @@ class FeatureInteractionAnalysis:
                         'synergy': 'positive' if interaction > 0 else 'negative'
                     })
         
+        # Handle empty interactions list
+        if not interactions:
+            print(f"\nNo significant feature interactions detected")
+            return pd.DataFrame(columns=['feature1', 'feature2', 'interaction', 'synergy'])
+        
         interactions_df = pd.DataFrame(interactions).sort_values('interaction', key=abs, ascending=False)
         
         if len(interactions_df) > 0:
@@ -331,7 +336,7 @@ class AblationStudyReporter:
         
         return report_path
     
-    def plot_feature_importance(self, top_n=20, output_dir="models"):
+    def plot_feature_importance(self, top_n=20, output_dir="images"):
         """Create visualization of feature importance"""
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)

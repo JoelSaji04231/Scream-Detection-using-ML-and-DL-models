@@ -1,0 +1,80 @@
+================================================================================
+COMPREHENSIVE ADVANCED ANALYSIS MASTER REPORT
+Generated: 2026-02-13 00:11:17.343887
+================================================================================
+
+================================================================================
+ANALYSIS SUMMARY
+================================================================================
+
+1. CROSS-VALIDATION RESULTS
+   Source: models\cv_report_SVM_20260212_235744.txt
+   This analysis shows model stability across 10 different data splits.
+   Key metric: Mean Accuracy ± Std Dev indicates reliability.
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+1. MODEL SELECTION:
+   - Consider using the statistically better-performing model
+   - Review SVM vs CNN comparison for practical implications
+   - Consider inference time and resource requirements
+
+2. FEATURE OPTIMIZATION:
+   - Ablation study identifies which features provide most value
+   - Removing negligible features reduces computational cost
+   - Critical features should be prioritized in extraction/processing
+
+3. MODEL RELIABILITY:
+   - Cross-validation results show consistency across data splits
+   - Low std dev indicates stable, reliable predictions
+   - Train-test gap indicates potential overfitting
+
+4. DEPLOYMENT CONSIDERATIONS:
+   - Review resource consumption metrics
+   - Ensure inference time meets requirements
+   - Plan for error handling based on error pattern analysis
+
+================================================================================
+FILE LOCATIONS
+================================================================================
+
+Cross-Validation: models\cv_report_SVM_20260212_235744.txt
+Complete Analysis: models\analysis_results_20260213_001116.json
+
+================================================================================
+GENERATED VISUALIZATIONS (IMAGES FOLDER)
+================================================================================
+Generated 14 visualization files:
+  • images\algo1.png
+  • images\algo2.png
+  • images\algo3.png
+  • images\analysis_mel_spectrograms.png
+  • images\analysis_mfcc_statistics.png
+  • images\analysis_spectrograms.png
+  • images\analysis_waveforms.png
+  • images\feature_chroma.png
+  • images\feature_rms_energy.png
+  • images\feature_spectral_bandwidth.png
+  • images\feature_spectral_centroid.png
+  • images\feature_spectral_contrast.png
+  • images\feature_spectral_rolloff.png
+  • images\feature_zero_crossing_rate.png
+
+Visualization types:
+  • Waveform comparisons (scream vs non-scream)
+  • Spectrogram analysis
+  • Mel-spectrogram analysis
+  • MFCC statistics
+  • Feature analysis (RMS, ZCR, spectral features, chroma, contrast)
+  • Feature importance plots (from ablation study)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review detailed reports in models/ directory
+2. Use insights from ablation study for feature optimization
+3. Validate findings on independent test set
+4. Deploy with confidence in statistical evidence of performance

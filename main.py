@@ -1,6 +1,5 @@
 import sounddevice as sd
 from scipy.io.wavfile import write
-import numpy as np
 import os
 import sys
 import io

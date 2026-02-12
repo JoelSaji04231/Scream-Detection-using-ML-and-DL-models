@@ -1,0 +1,43 @@
+================================================================================
+CROSS-VALIDATION REPORT: SVM
+Generated: 2026-02-12 23:57:44.840673
+================================================================================
+
+Configuration:
+  CV Folds: 10
+  Stratified: True
+  Sample Size: 4102
+  Number of Features: 34
+
+
+Detailed Metrics:
+
+ACCURACY:
+  Test Set - Mean: 0.9654, Std: 0.0066
+  Test Set - Min: 0.9537, Max: 0.9780
+  Train Set - Mean: 0.9775, Std: 0.0009
+  Train-Test Gap: +0.0121
+
+PRECISION:
+  Test Set - Mean: 0.9241, Std: 0.0177
+  Test Set - Min: 0.8905, Max: 0.9538
+  Train Set - Mean: 0.9478, Std: 0.0025
+  Train-Test Gap: +0.0236
+
+RECALL:
+  Test Set - Mean: 0.9676, Std: 0.0056
+  Test Set - Min: 0.9603, Max: 0.9764
+  Train Set - Mean: 0.9811, Std: 0.0013
+  Train-Test Gap: +0.0135
+
+F1:
+  Test Set - Mean: 0.9453, Std: 0.0100
+  Test Set - Min: 0.9278, Max: 0.9650
+  Train Set - Mean: 0.9642, Std: 0.0015
+  Train-Test Gap: +0.0189
+
+ROC_AUC:
+  Test Set - Mean: 0.9918, Std: 0.0023
+  Test Set - Min: 0.9890, Max: 0.9955
+  Train Set - Mean: 0.9961, Std: 0.0003
+  Train-Test Gap: +0.0043

@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset
 import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -91,8 +91,22 @@ class MelSpectrogramCNN(nn.Module):
         return x
 
 
-# === TRAINING FUNCTION (with class weighting) ===
+# ===== TRAINING FUNCTION (with class weighting) =====
 def train_model(model, train_loader, val_loader, class_weight=None, epochs=30, lr=0.001):
+    """
+    Train the CNN model on mel-spectrograms with early stopping and validation monitoring.
+    
+    Args:
+        model: The CNN model to train
+        train_loader: DataLoader for training data
+        val_loader: DataLoader for validation data
+        class_weight: Weight for positive class (scream) in loss calculation
+        epochs: Maximum number of training epochs
+        lr: Learning rate for optimizer
+    
+    Returns:
+        tuple: (trained_model, train_losses, val_losses, val_accuracies)
+    """
     # Use weighted loss if class weights are provided
     if class_weight is not None:
         pos_weight = torch.tensor([class_weight]).to(device)
@@ -172,6 +186,16 @@ def train_model(model, train_loader, val_loader, class_weight=None, epochs=30, l
 
 
 def evaluate_model(model, test_loader):
+    """
+    Evaluate the trained model on test data and calculate performance metrics.
+    
+    Args:
+        model: The trained CNN model to evaluate
+        test_loader: DataLoader for test data
+    
+    Returns:
+        dict: Dictionary containing evaluation metrics and predictions
+    """
     model.eval()
     all_preds = []
     all_probs = []

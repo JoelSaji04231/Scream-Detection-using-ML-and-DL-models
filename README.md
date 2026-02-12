@@ -5,7 +5,7 @@ A comprehensive machine learning and deep learning project for detecting screams
 ## 🎯 Project Overview
 
 This project implements state-of-the-art scream detection using:
-- **Machine Learning:** SVM, Random Forest, Logistic Regression with ESC-50 dataset
+- **Machine Learning:** SVM, Random Forest, Logistic Regression with ESC-50 dataset and Kaggle scream detection dataset
 - **Deep Learning:** CNN and CNN-LSTM on spectrograms and mel-spectrograms
 - **Advanced Analysis:** Statistical significance testing, 10-fold CV, feature ablation, error analysis, resource monitoring
 
@@ -251,6 +251,19 @@ Energy per inference: 0.1498 Wh
 
 ## 📈 Model Comparison Results
 
+### Latest Cross-Validation Results (SVM Model)
+**Generated:** February 13, 2026
+
+| Metric | Value | Stability |
+|--------|-------|-----------|
+| **Accuracy** | **96.54% ± 0.66%** | Excellent (σ < 0.01) |
+| **Precision** | **92.41% ± 1.77%** | Excellent (σ < 0.02) |
+| **Recall** | **96.76% ± 0.56%** | Excellent (σ < 0.01) |
+| **F1-Score** | **94.53% ± 1.00%** | Excellent (σ < 0.01) |
+| **ROC-AUC** | **99.18% ± 0.23%** | Excellent (σ < 0.01) |
+
+### Historical Model Comparison
+
 | Metric | SVM | CNN | CNN-LSTM |
 |--------|-----|-----|----------|
 | Accuracy | 87.5% | 89.2% | 88.8% |
@@ -259,6 +272,34 @@ Energy per inference: 0.1498 Wh
 | F1-Score | 84.7% | 87.6% | 86.8% |
 | Training Time | < 1 min | 5-10 min | 10-15 min |
 | Inference Time | 0.5 ms | 2.1 ms | 3.2 ms |
+
+### Latest Feature Ablation Study Results (February 13, 2026)
+
+**Top 5 Most Critical Features:**
+
+| Feature | Importance | Impact on Accuracy |
+|---------|------------|-------------------|
+| **mfcc2_mean** | 0.003413 | -0.66% without |
+| **mfcc10_mean** | 0.002194 | -0.48% without |
+| **mfcc13_mean** | 0.002194 | -0.48% without |
+| **mfcc12_mean** | 0.001707 | -0.42% without |
+| **mfcc11_mean** | 0.001462 | -0.38% without |
+
+**Feature Group Importance:**
+
+| Group | Feature Count | Accuracy Without | Importance |
+|-------|---------------|------------------|------------|
+| **MFCC** | 26 | 92.03% | 0.0427 (Critical) |
+| **Spectral** | 4 | 94.37% | 0.0193 (High) |
+| **RMS Energy** | 2 | 95.86% | 0.0044 (Moderate) |
+| **Zero Crossing Rate** | 2 | 96.20% | 0.0010 (Low) |
+| **Spectral Rolloff** | 2 | 96.34% | -0.0005 (Negligible) |
+
+**Key Insights:**
+- MFCC features are **critical** for scream detection (4.3% accuracy drop without them)
+- Spectral features provide **high** importance (1.9% accuracy drop)
+- Energy-based features have **moderate** impact
+- ZCR and spectral rolloff can be removed with minimal impact
 
 ## 🎯 Use Cases
 
@@ -398,7 +439,12 @@ Contributions welcome! Please:
 
 ## 📄 License
 
-This project uses the ESC-50 dataset which is licensed under Creative Commons.
+This project uses two datasets:
+
+1. **ESC-50 Dataset** - Environmental Sound Classification dataset licensed under Creative Commons
+2. **Scream Detection Dataset** - Audio dataset of scream and non-scream samples from [Kaggle](https://www.kaggle.com/datasets/aananehsansiam/audio-dataset-of-scream-and-non-scream) by aananehsansiam, stored in `Converted_Separately/` directory
+
+All audio data and trained models are provided under their respective original licenses. Please refer to the Kaggle dataset page for specific licensing terms of the scream detection dataset.
 
 ## 📬 Contact & Support
 
@@ -456,7 +502,7 @@ Tested on:
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** February 13, 2026
 
 **For quick start:** Read [QUICK_START.md](QUICK_START.md) (5 min read)
 

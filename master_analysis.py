@@ -33,14 +33,19 @@ class Colors:
 
 
 def print_section(title):
-    """Print a formatted section header"""
+    """Print a formatted section header with color formatting."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*80}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.CYAN}{title:^80}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.CYAN}{'='*80}{Colors.ENDC}\n")
 
 
 def print_status(message, status='info'):
-    """Print status message with appropriate color"""
+    """Print status message with appropriate color coding.
+    
+    Args:
+        message: The message to display
+        status: The status type ('info', 'success', 'error', 'warning')
+    """
     if status == 'success':
         print(f"{Colors.GREEN}✓{Colors.ENDC} {message}")
     elif status == 'error':
@@ -52,7 +57,15 @@ def print_status(message, status='info'):
 
 
 def run_analysis_script(script_name, description):
-    """Run one of the analysis scripts"""
+    """Run an analysis script and handle errors.
+    
+    Args:
+        script_name: Name of the script to run
+        description: Description of what the script does
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
     print_section(description)
     
     try:
@@ -99,6 +112,25 @@ def verify_requirements():
             print_status(f"Missing: {file}", 'error')
             all_exist = False
     
+    # Check for audio analysis requirements
+    print_status("Checking audio analysis requirements...", 'info')
+    
+    # Check for Converted_Separately directory
+    if os.path.exists('Converted_Separately/scream') and os.path.exists('Converted_Separately/non_scream'):
+        scream_files = len([f for f in os.listdir('Converted_Separately/scream') if f.endswith('.wav')])
+        non_scream_files = len([f for f in os.listdir('Converted_Separately/non_scream') if f.endswith('.wav')])
+        print_status(f"Audio data found: {scream_files} scream files, {non_scream_files} non-scream files", 'success')
+    else:
+        print_status("Audio data not found in Converted_Separately/ directory", 'warning')
+        print_status("Audio analysis will be skipped", 'warning')
+    
+    # Check for images directory
+    if not os.path.exists('images'):
+        os.makedirs('images')
+        print_status("Created images directory for saving visualizations", 'success')
+    else:
+        print_status("Images directory exists", 'success')
+    
     if not all_exist:
         print_status("\nRequired files missing. Please train models first:", 'error')
         print(f"  1. python train_ml.py      (generates SVM and train_test_split)")
@@ -112,6 +144,7 @@ def verify_requirements():
 def get_available_scripts():
     """Get list of available analysis scripts"""
     scripts = [
+        ('analyze_audio.py', '0. AUDIO ANALYSIS (Generate visualizations and images)'),
         ('cross_validation_analysis.py', '1. CROSS-VALIDATION ANALYSIS (10-fold stratified)'),
         ('compare_models_advanced.py', '2. SVM vs CNN COMPARISON (Statistical significance)'),
         ('ablation_study.py', '3. ABLATION STUDY (Feature importance analysis)'),
@@ -273,6 +306,31 @@ def generate_master_report():
             f.write(f"Complete Analysis: {analysis_json}\n")
         
         f.write("\n" + "="*80 + "\n")
+        f.write("GENERATED VISUALIZATIONS (IMAGES FOLDER)\n")
+        f.write("="*80 + "\n")
+        
+        # List all images in the images folder
+        try:
+            import glob
+            image_files = glob.glob('images/*.png')
+            if image_files:
+                f.write(f"Generated {len(image_files)} visualization files:\n")
+                for img_file in sorted(image_files):
+                    f.write(f"  • {img_file}\n")
+            else:
+                f.write("No visualization files found in images/ folder\n")
+        except:
+            f.write("Could not list visualization files\n")
+        
+        f.write("\nVisualization types:\n")
+        f.write("  • Waveform comparisons (scream vs non-scream)\n")
+        f.write("  • Spectrogram analysis\n")
+        f.write("  • Mel-spectrogram analysis\n")
+        f.write("  • MFCC statistics\n")
+        f.write("  • Feature analysis (RMS, ZCR, spectral features, chroma, contrast)\n")
+        f.write("  • Feature importance plots (from ablation study)\n")
+        
+        f.write("\n" + "="*80 + "\n")
         f.write("NEXT STEPS\n")
         f.write("="*80 + "\n")
         
@@ -325,11 +383,25 @@ def run_all_analyses():
         status = '✓' if result['success'] else '✗'
         print(f"  {status} {result['description']}")
     
+    # Summary of generated images
+    try:
+        import glob
+        image_files = glob.glob('images/*.png')
+        if image_files:
+            print_status(f"Generated {len(image_files)} visualization files in images/ folder", 'success')
+            print("\nGenerated Images:")
+            for img_file in sorted(image_files):
+                print(f"  • {img_file}")
+        else:
+            print_status("No visualization files generated", 'info')
+    except:
+        pass
+    
     return True
 
 
 def main():
-    """Main entry point"""
+    """Main entry point - automatically runs all analyses"""
     print_section("ADVANCED SCREAM DETECTION MODEL ANALYSIS SUITE")
     
     print("This suite provides:")
@@ -338,6 +410,7 @@ def main():
     print("  • Feature importance analysis via ablation study")
     print("  • Error pattern analysis and diagnostics")
     print("  • Resource consumption monitoring")
+    print("  • Audio analysis with image generation")
     print()
     
     # Check for command line arguments
@@ -348,29 +421,36 @@ def main():
             return
         elif sys.argv[1].lower() == '--help':
             print("Usage:")
-            print("  python master_analysis.py          (interactive menu)")
+            print("  python master_analysis.py          (run all analyses automatically)")
             print("  python master_analysis.py all      (run all analyses)")
+            print("  python master_analysis.py menu     (interactive menu)")
             return
-    
-    # Interactive menu
-    while True:
-        choice, scripts = interactive_menu()
-        
-        if choice == len(scripts) + 2:  # QUIT
-            print_status("Exiting...", 'info')
-            break
-        elif choice == len(scripts) + 1:  # RUN ALL
-            print_status("Running all analyses...", 'info')
-            if run_all_analyses():
-                if input("\nRun again? (y/n): ").lower() != 'y':
+        elif sys.argv[1].lower() == 'menu':
+            # Interactive menu
+            while True:
+                choice, scripts = interactive_menu()
+                
+                if choice == len(scripts) + 2:  # QUIT
                     print_status("Exiting...", 'info')
                     break
-        else:  # Run specific analysis
-            script, description = scripts[choice - 1]
-            if run_analysis_script(script, description):
-                if input("\nRun another analysis? (y/n): ").lower() != 'y':
-                    print_status("Exiting...", 'info')
-                    break
+                elif choice == len(scripts) + 1:  # RUN ALL
+                    print_status("Running all analyses...", 'info')
+                    if run_all_analyses():
+                        if input("\nRun again? (y/n): ").lower() != 'y':
+                            print_status("Exiting...", 'info')
+                            break
+                else:  # Run specific analysis
+                    script, description = scripts[choice - 1]
+                    if run_analysis_script(script, description):
+                        if input("\nRun another analysis? (y/n): ").lower() != 'y':
+                            print_status("Exiting...", 'info')
+                            break
+    else:
+        # Automatically run all analyses
+        print_status("Automatically running all analyses...", 'info')
+        print_status("Use 'python master_analysis.py menu' for interactive mode", 'info')
+        print()
+        run_all_analyses()
 
 
 if __name__ == "__main__":
@@ -378,5 +458,5 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print(f"\n\n{Colors.YELLOW}Interrupted by user{Colors.ENDC}")
-except Exception as e:
+    except Exception as e:
         print(f"\n{Colors.RED}Error: {str(e)}{Colors.ENDC}")

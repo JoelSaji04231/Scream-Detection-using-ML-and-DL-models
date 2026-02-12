@@ -1,0 +1,29 @@
+======================================================================
+COMPREHENSIVE MODEL ANALYSIS REPORT
+Generated: 2026-02-12 23:53:51.420593
+======================================================================
+
+1. CROSS-VALIDATION RESULTS
+----------------------------------------------------------------------
+ACCURACY: 0.9654 ± 0.0066
+PRECISION: 0.9241 ± 0.0177
+RECALL: 0.9676 ± 0.0056
+F1: 0.9453 ± 0.0100
+ROC_AUC: 0.9918 ± 0.0023
+
+2. STATISTICAL SIGNIFICANCE
+----------------------------------------------------------------------
+Paired t-test p-value: nan
+McNemar test p-value: None
+
+3. ERROR ANALYSIS
+----------------------------------------------------------------------
+True Negatives: 685, False Positives: 24
+False Negatives: 7, True Positives: 310
+
+4. RESOURCE CONSUMPTION
+----------------------------------------------------------------------
+CPU Mean: 16.31%
+Memory Mean: 66.84%
+Time per sample: 0.3177ms
+Estimated Energy: 0.000094Wh

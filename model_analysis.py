@@ -273,7 +273,12 @@ class AblationStudy:
         
         for group_name, group_features in feature_groups.items():
             # Create mask to remove this group
-            feature_mask = ~self.feature_names.isin(group_features)
+            # Handle both pandas and numpy arrays
+            if hasattr(self.feature_names, 'isin'):
+                feature_mask = ~self.feature_names.isin(group_features)
+            else:
+                # For numpy arrays, use numpy's isin function
+                feature_mask = ~np.isin(self.feature_names, group_features)
             X_ablated = self.X.iloc[:, feature_mask]
             
             # Calculate accuracy without this group
@@ -560,7 +565,15 @@ def run_comprehensive_analysis():
     feature_names = train_test_data['feature_names']
     
     # Convert labels to numeric if needed
-    y_test_numeric = (y_test == 'scream').astype(int) if isinstance(y_test[0], str) else y_test
+    try:
+        if len(y_test) > 0 and isinstance(y_test.iloc[0] if hasattr(y_test, 'iloc') else y_test[0], str):
+            y_test_numeric = (y_test == 'scream').astype(int)
+        else:
+            y_test_numeric = y_test
+    except (IndexError, KeyError, TypeError):
+        # Handle case where y_test is empty or has different structure
+        print(f"⚠ Warning: Could not access y_test[0], using y_test as-is")
+        y_test_numeric = y_test
     
     print(f"✓ Models loaded")
     print(f"✓ Test set: {len(X_test)} samples")
@@ -570,7 +583,17 @@ def run_comprehensive_analysis():
     # ============ CROSS-VALIDATION ============
     X_train = train_test_data['X_train']
     y_train = train_test_data['y_train']
-    y_train_numeric = (y_train == 'scream').astype(int) if isinstance(y_train[0], str) else y_train
+    
+    # Convert training labels to numeric if needed
+    try:
+        if len(y_train) > 0 and isinstance(y_train.iloc[0] if hasattr(y_train, 'iloc') else y_train[0], str):
+            y_train_numeric = (y_train == 'scream').astype(int)
+        else:
+            y_train_numeric = y_train
+    except (IndexError, KeyError, TypeError):
+        # Handle case where y_train is empty or has different structure
+        print(f"⚠ Warning: Could not access y_train[0], using y_train as-is")
+        y_train_numeric = y_train
     
     cv_results = perform_cross_validation(X_train, y_train_numeric, svm_pipeline, cv_folds=10)
     results['cross_validation'] = cv_results
@@ -603,7 +626,9 @@ def run_comprehensive_analysis():
     }
     
     # ============ ERROR PATTERN ANALYSIS ============
-    error_analysis = ErrorPatternAnalysis(y_test_numeric, svm_predictions, X=X_test, feature_names=feature_names)
+    # Convert predictions to numeric format for consistency with y_test_numeric
+    svm_predictions_numeric = (svm_predictions == 'scream').astype(int)
+    error_analysis = ErrorPatternAnalysis(y_test_numeric, svm_predictions_numeric, X=X_test, feature_names=feature_names)
     error_patterns = error_analysis.analyze_errors()
     results['error_analysis'] = error_patterns
     

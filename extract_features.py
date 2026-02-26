@@ -132,8 +132,8 @@ print(f"- Hop length: {HOP_LENGTH}")
 
 # Check for audio data
 try:
-    scream_audio_files = glob('C:/Users/joels/Desktop/Programming/Scream Detection ML and DL/Converted_Separately/scream/*.wav')
-    non_scream_audio_files = glob('C:/Users/joels/Desktop/Programming/Scream Detection ML and DL/Converted_Separately/non_scream/*.wav')
+    scream_audio_files = glob('Converted_Separately/scream/*.wav')
+    non_scream_audio_files = glob('Converted_Separately/non_scream/*.wav')
     
     print(f"\nFound {len(scream_audio_files)} scream audio files")
     print(f"Found {len(non_scream_audio_files)} non-scream audio files")

@@ -38,7 +38,7 @@ except FileNotFoundError:
 
 # Separate features and target
 print("\nPreparing data...")
-feature_columns = [col for col in df.columns if col != 'label']
+feature_columns = [col for col in df.columns if col not in ['label', 'file_path']]
 X = df[feature_columns]
 y = df['label']
 

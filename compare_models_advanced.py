@@ -1,565 +1,475 @@
 """
-Advanced SVM vs CNN Comparison with Statistical Significance Testing
-Includes:
-- Side-by-side performance metrics
-- Paired t-test and McNemar's test
-- Cross-model error analysis
-- Confidence calibration
+Advanced Statistical Significance Testing for Model Comparison
+Compares SVM vs CNN with proper statistical tests
 """
 
 import pandas as pd
 import numpy as np
-import librosa
-import joblib
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import os
-import warnings
+from sklearn.metrics import accuracy_score, confusion_matrix
 from scipy import stats
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, classification_report, roc_auc_score,
-    roc_curve, auc
-)
-import matplotlib.pyplot as plt
+from scipy.stats import ttest_rel, chi2_contingency, norm
 import json
-from datetime import datetime
-
+import os
+import joblib
+import warnings
 warnings.filterwarnings('ignore')
 
-# Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print("="*60)
+print("ADVANCED STATISTICAL SIGNIFICANCE TESTING")
+print("Comparing SVM vs CNN with proper statistical tests")
+print("="*60)
 
-
-# ============================================================================
-# SECTION 1: LOAD CNN MODEL (must match training architecture)
-# ============================================================================
-
-class SpectrogramCNN(nn.Module):
-    def __init__(self):
-        super(SpectrogramCNN, self).__init__()
+class StatisticalModelComparison:
+    def __init__(self, svm_model, cnn_model, X_test, y_test, device='cpu'):
+        self.svm_model = svm_model
+        self.cnn_model = cnn_model
+        self.X_test = X_test
+        self.y_test = y_test
+        self.device = device
+        self.results = {}
         
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.pool1 = nn.MaxPool2d(2, 2)
-        self.dropout1 = nn.Dropout2d(0.25)
+    def get_svm_predictions(self, X_test):
+        """Get SVM predictions and probabilities"""
+        scaler = self.svm_model['scaler']
+        model = self.svm_model['model']
         
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.dropout2 = nn.Dropout2d(0.25)
+        X_test_scaled = scaler.transform(X_test)
+        predictions = model.predict(X_test_scaled)
+        probabilities = model.predict_proba(X_test_scaled)[:, 1]
         
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.pool3 = nn.MaxPool2d(2, 2)
-        self.dropout3 = nn.Dropout2d(0.25)
-        
-        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
-        self.pool4 = nn.MaxPool2d(2, 2)
-        self.dropout4 = nn.Dropout2d(0.25)
-        
-        self.fc1 = nn.Linear(256 * 8 * 8, 512)
-        self.bn5 = nn.BatchNorm1d(512)
-        self.dropout5 = nn.Dropout(0.5)
-        
-        self.fc2 = nn.Linear(512, 256)
-        self.bn6 = nn.BatchNorm1d(256)
-        self.dropout6 = nn.Dropout(0.5)
-        
-        self.fc3 = nn.Linear(256, 1)
+        return predictions, probabilities
     
-    def forward(self, x):
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.dropout1(x)
+    def get_cnn_predictions(self, X_test):
+        """Get CNN predictions and probabilities"""
+        self.cnn_model.eval()
         
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = self.dropout2(x)
-        
-        x = self.pool3(F.relu(self.bn3(self.conv3(x))))
-        x = self.dropout3(x)
-        
-        x = self.pool4(F.relu(self.bn4(self.conv4(x))))
-        x = self.dropout4(x)
-        
-        x = x.view(x.size(0), -1)
-        
-        x = F.relu(self.bn5(self.fc1(x)))
-        x = self.dropout5(x)
-        
-        x = F.relu(self.bn6(self.fc2(x)))
-        x = self.dropout6(x)
-        
-        x = self.fc3(x)
-        return x
-
-
-# ============================================================================
-# SECTION 2: COMPARISON METRICS
-# ============================================================================
-
-class ModelComparison:
-    """Compare performance of two models with statistical tests"""
-    
-    def __init__(self, y_true, svm_preds, svm_probas, cnn_preds, cnn_probas):
-        self.y_true = y_true
-        self.svm_preds = svm_preds
-        self.svm_probas = svm_probas
-        self.cnn_preds = cnn_preds
-        self.cnn_probas = cnn_probas
-        
-    def calculate_metrics(self, predictions, probas, model_name):
-        """Calculate detailed metrics for a model"""
-        accuracy = accuracy_score(self.y_true, predictions)
-        precision = precision_score(self.y_true, predictions, zero_division=0)
-        recall = recall_score(self.y_true, predictions, zero_division=0)
-        f1 = f1_score(self.y_true, predictions, zero_division=0)
-        
-        # ROC-AUC
-        try:
-            roc_auc = roc_auc_score(self.y_true, probas)
-        except:
-            roc_auc = None
-        
-        # Matthews Correlation Coefficient
-        from sklearn.metrics import matthews_corrcoef
-        mcc = matthews_corrcoef(self.y_true, predictions)
-        
-        # Confusion matrix
-        tn, fp, fn, tp = confusion_matrix(self.y_true, predictions, labels=[0, 1]).ravel()
-        
-        metrics = {
-            'model': model_name,
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1': f1,
-            'roc_auc': roc_auc,
-            'mcc': mcc,
-            'tn': tn,
-            'fp': fp,
-            'fn': fn,
-            'tp': tp,
-            'specificity': tn / (tn + fp) if (tn + fp) > 0 else 0,
-            'sensitivity': tp / (tp + fn) if (tp + fn) > 0 else 0,
-            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0,
-            'fnr': fn / (fn + tp) if (fn + tp) > 0 else 0
-        }
-        
-        return metrics
-    
-    def print_comparison_table(self):
-        """Print side-by-side comparison"""
-        svm_metrics = self.calculate_metrics(self.svm_preds, self.svm_probas, 'SVM')
-        cnn_metrics = self.calculate_metrics(self.cnn_preds, self.cnn_probas, 'CNN')
-        
-        print("\n" + "="*80)
-        print("MODEL PERFORMANCE COMPARISON")
-        print("="*80)
-        
-        metrics_to_show = ['accuracy', 'precision', 'recall', 'f1', 'roc_auc', 'mcc',
-                          'specificity', 'sensitivity', 'fpr', 'fnr']
-        
-        print(f"\n{'Metric':<20} {'SVM':<20} {'CNN':<20} {'Difference':<15}")
-        print("-" * 80)
-        
-        for metric in metrics_to_show:
-            svm_val = svm_metrics[metric]
-            cnn_val = cnn_metrics[metric]
-            
-            if svm_val is not None and cnn_val is not None:
-                diff = cnn_val - svm_val
-                svm_str = f"{svm_val:.4f}"
-                cnn_str = f"{cnn_val:.4f}"
-                diff_str = f"{diff:+.4f}"
+        with torch.no_grad():
+            if isinstance(X_test, np.ndarray):
+                X_test_tensor = torch.FloatTensor(X_test).to(self.device)
+            else:
+                X_test_tensor = X_test.to(self.device)
                 
-                print(f"{metric:<20} {svm_str:<20} {cnn_str:<20} {diff_str:<15}")
-        
-        # Confusion matrices
-        print("\n" + "-"*80)
-        print("CONFUSION MATRICES")
-        print("-"*80)
-        
-        print(f"\nSVM:")
-        print(f"  TN: {svm_metrics['tn']:<6} FP: {svm_metrics['fp']:<6}")
-        print(f"  FN: {svm_metrics['fn']:<6} TP: {svm_metrics['tp']:<6}")
-        
-        print(f"\nCNN:")
-        print(f"  TN: {cnn_metrics['tn']:<6} FP: {cnn_metrics['fp']:<6}")
-        print(f"  FN: {cnn_metrics['fn']:<6} TP: {cnn_metrics['tp']:<6}")
-        
-        return svm_metrics, cnn_metrics
+            outputs = self.cnn_model(X_test_tensor)
+            probabilities = F.softmax(outputs, dim=1)[:, 1].cpu().numpy()
+            predictions = torch.argmax(outputs, dim=1).cpu().numpy()
+            
+        return predictions, probabilities
     
-    def paired_t_test(self):
-        """
-        Paired t-test: tests if the difference in accuracy is statistically significant
-        H0: Models have equal accuracy
-        H1: Models have different accuracy
-        """
-        print("\n" + "="*80)
-        print("PAIRED T-TEST: Comparing Model Accuracy")
-        print("="*80)
+    def paired_t_test(self, svm_scores, cnn_scores):
+        """Paired t-test for accuracy comparison"""
+        print("\n1. PAIRED T-TEST (Accuracy Comparison)")
+        print("-" * 40)
         
-        # Create binary correct/incorrect
-        svm_correct = (self.svm_preds == self.y_true).astype(int)
-        cnn_correct = (self.cnn_preds == self.y_true).astype(int)
-        
-        svm_acc = svm_correct.mean()
-        cnn_acc = cnn_correct.mean()
-        diff = cnn_acc - svm_acc
+        # Check if we have the same number of samples
+        if len(svm_scores) != len(cnn_scores):
+            print(f"✗ Different sample sizes: SVM={len(svm_scores)}, CNN={len(cnn_scores)}")
+            return None
+            
+        # Calculate differences
+        differences = svm_scores - cnn_scores
         
         # Paired t-test
-        t_stat, p_value = stats.ttest_rel(svm_correct, cnn_correct)
+        t_stat, p_value = ttest_rel(svm_scores, cnn_scores)
         
-        print(f"\nNull Hypothesis (H0): SVM and CNN have equal accuracy")
-        print(f"Alternative (H1): SVM and CNN have different accuracy")
+        # Effect size (Cohen's d for paired samples)
+        mean_diff = np.mean(differences)
+        std_diff = np.std(differences, ddof=1)
+        cohens_d = mean_diff / std_diff if std_diff > 0 else 0
         
-        print(f"\nResults:")
-        print(f"  SVM Accuracy:  {svm_acc:.4f}")
-        print(f"  CNN Accuracy:  {cnn_acc:.4f}")
-        print(f"  Difference:    {diff:+.4f} ({'CNN better' if diff > 0 else 'SVM better'})")
+        # Confidence interval for mean difference
+        n = len(differences)
+        se_diff = std_diff / np.sqrt(n)
+        t_critical = stats.t.ppf(0.975, n-1)  # 95% CI
+        ci_lower = mean_diff - t_critical * se_diff
+        ci_upper = mean_diff + t_critical * se_diff
         
-        print(f"\n  t-statistic: {t_stat:.4f}")
-        print(f"  p-value:     {p_value:.6f}")
-        print(f"  α = 0.05")
+        print(f"SVM Mean Accuracy:  {np.mean(svm_scores):.4f} ± {np.std(svm_scores):.4f}")
+        print(f"CNN Mean Accuracy:  {np.mean(cnn_scores):.4f} ± {np.std(cnn_scores):.4f}")
+        print(f"Mean Difference:    {mean_diff:.4f}")
+        print(f"95% CI for Diff:    [{ci_lower:.4f}, {ci_upper:.4f}]")
+        print(f"t-statistic:        {t_stat:.4f}")
+        print(f"p-value:            {p_value:.4f}")
+        print(f"Cohen's d:          {cohens_d:.4f}")
         
-        if p_value < 0.05:
-            print(f"\n  ✓ RESULT: REJECT null hypothesis (p < 0.05)")
-            print(f"    There IS a statistically significant difference")
-            better = "CNN" if diff > 0 else "SVM"
-            print(f"    {better} is significantly better")
+        # Interpretation
+        if p_value < 0.001:
+            significance = "*** HIGHLY SIGNIFICANT ***"
+        elif p_value < 0.01:
+            significance = "** VERY SIGNIFICANT **"
+        elif p_value < 0.05:
+            significance = "* SIGNIFICANT *"
         else:
-            print(f"\n  ✗ RESULT: FAIL TO REJECT null hypothesis (p ≥ 0.05)")
-            print(f"    No statistically significant difference detected")
-            print(f"    The observed difference could be due to random chance")
+            significance = "NOT SIGNIFICANT"
+            
+        print(f"Result:             {significance}")
         
-        return {
-            'svm_accuracy': svm_acc,
-            'cnn_accuracy': cnn_acc,
-            'difference': diff,
+        # Effect size interpretation
+        if abs(cohens_d) < 0.2:
+            effect_size = "Negligible"
+        elif abs(cohens_d) < 0.5:
+            effect_size = "Small"
+        elif abs(cohens_d) < 0.8:
+            effect_size = "Medium"
+        else:
+            effect_size = "Large"
+            
+        print(f"Effect Size:        {effect_size}")
+        
+        self.results['paired_t_test'] = {
+            'svm_mean': np.mean(svm_scores),
+            'svm_std': np.std(svm_scores),
+            'cnn_mean': np.mean(cnn_scores),
+            'cnn_std': np.std(cnn_scores),
+            'mean_difference': mean_diff,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
             't_statistic': t_stat,
             'p_value': p_value,
-            'significant': p_value < 0.05
+            'cohens_d': cohens_d,
+            'significance': significance,
+            'effect_size': effect_size
         }
+        
+        return self.results['paired_t_test']
     
-    def mcnemar_test(self):
-        """
-        McNemar's Test: tests if models make significantly different errors
-        H0: Models make the same types of errors
-        H1: Models make different types of errors
-        """
-        print("\n" + "="*80)
-        print("McNEMAR'S TEST: Comparing Error Patterns")
-        print("="*80)
+    def mcnemars_test(self, svm_predictions, cnn_predictions):
+        """McNemar's test for error pattern comparison"""
+        print("\n2. MCNEMAR'S TEST (Error Pattern Comparison)")
+        print("-" * 40)
         
-        svm_correct = (self.svm_preds == self.y_true)
-        cnn_correct = (self.cnn_preds == self.y_true)
-        
-        # Contingency table
-        both_correct = np.sum(svm_correct & cnn_correct)
-        both_wrong = np.sum(~svm_correct & ~cnn_correct)
-        svm_correct_cnn_wrong = np.sum(svm_correct & ~cnn_correct)  # a
-        svm_wrong_cnn_correct = np.sum(~svm_correct & cnn_correct)  # b
-        
-        print(f"\nNull Hypothesis (H0): SVM and CNN make the same errors")
-        print(f"Alternative (H1): SVM and CNN make different errors")
-        
-        print(f"\nContingency Table:")
-        print(f"  Both Correct:              {both_correct}")
-        print(f"  Both Wrong:                {both_wrong}")
-        print(f"  SVM Correct, CNN Wrong:    {svm_correct_cnn_wrong}")
-        print(f"  CNN Correct, SVM Wrong:    {svm_wrong_cnn_correct}")
+        # Create contingency table
+        # Rows: SVM Correct/Incorrect, Columns: CNN Correct/Incorrect
+        contingency_table = confusion_matrix(svm_predictions == self.y_test, 
+                                           cnn_predictions == self.y_test)
         
         # McNemar's test
-        if (svm_correct_cnn_wrong + svm_wrong_cnn_correct) > 0:
-            numerator = (svm_correct_cnn_wrong - svm_wrong_cnn_correct) ** 2
-            denominator = svm_correct_cnn_wrong + svm_wrong_cnn_correct
-            chi2_stat = numerator / denominator
-            p_value = 1 - stats.chi2.cdf(chi2_stat, df=1)
-            
-            print(f"\nResults:")
-            print(f"  χ² statistic: {chi2_stat:.4f}")
-            print(f"  p-value:      {p_value:.6f}")
-            print(f"  α = 0.05")
-            
-            if p_value < 0.05:
-                print(f"\n  ✓ RESULT: REJECT null hypothesis (p < 0.05)")
-                print(f"    Models make significantly DIFFERENT error patterns")
-            else:
-                print(f"\n  ✗ RESULT: FAIL TO REJECT null hypothesis (p ≥ 0.05)")
-                print(f"    Models make SIMILAR error patterns")
-            
-            return {
-                'chi2_statistic': chi2_stat,
-                'p_value': p_value,
-                'both_correct': both_correct,
-                'both_wrong': both_wrong,
-                'svm_c_cnn_w': svm_correct_cnn_wrong,
-                'cnn_c_svm_w': svm_wrong_cnn_correct,
-                'significant': p_value < 0.05
-            }
+        # H0: Both models have the same error patterns
+        # H1: Models have different error patterns
+        
+        # Extract the discordant pairs (b and c cells)
+        b = contingency_table[0, 1]  # SVM correct, CNN incorrect
+        c = contingency_table[1, 0]  # SVM incorrect, CNN correct
+        
+        # McNemar's statistic
+        if b + c > 0:
+            mcnemar_stat = (abs(b - c) - 1)**2 / (b + c)  # With continuity correction
+            p_value = 1 - stats.chi2.cdf(mcnemar_stat, 1)
         else:
-            print(f"\n  ⚠ Not enough disagreement for McNemar's test")
-            return None
-    
-    def proportions_test(self):
-        """
-        Two-proportion z-test: tests if FPR or FNR differs significantly
-        """
-        print("\n" + "="*80)
-        print("TWO-PROPORTION Z-TEST: FPR and FNR Comparison")
-        print("="*80)
+            mcnemar_stat = 0
+            p_value = 1.0
         
-        svm_metrics = self.calculate_metrics(self.svm_preds, self.svm_probas, 'SVM')
-        cnn_metrics = self.calculate_metrics(self.cnn_preds, self.cnn_probas, 'CNN')
+        print(f"SVM Correct, CNN Incorrect: {b}")
+        print(f"SVM Incorrect, CNN Correct: {c}")
+        print(f"McNemar's χ²: {mcnemar_stat:.4f}")
+        print(f"p-value: {p_value:.4f}")
         
-        # FPR test
-        svm_fp_total = svm_metrics['fp'] + svm_metrics['tn']
-        cnn_fp_total = cnn_metrics['fp'] + cnn_metrics['tn']
-        
-        if svm_fp_total > 0 and cnn_fp_total > 0:
-            p1 = svm_metrics['fp'] / svm_fp_total
-            p2 = cnn_metrics['fp'] / cnn_fp_total
-            
-            p_pool = (svm_metrics['fp'] + cnn_metrics['fp']) / (svm_fp_total + cnn_fp_total)
-            se = np.sqrt(p_pool * (1 - p_pool) * (1/svm_fp_total + 1/cnn_fp_total))
-            z_fpr = (p1 - p2) / se if se > 0 else 0
-            p_value_fpr = 2 * (1 - stats.norm.cdf(abs(z_fpr)))
-            
-            print(f"\nFalse Positive Rate:")
-            print(f"  SVM FPR: {p1:.4f}")
-            print(f"  CNN FPR: {p2:.4f}")
-            print(f"  z-statistic: {z_fpr:.4f}")
-            print(f"  p-value: {p_value_fpr:.6f}")
-        
-        # FNR test
-        svm_fn_total = svm_metrics['fn'] + svm_metrics['tp']
-        cnn_fn_total = cnn_metrics['fn'] + cnn_metrics['tp']
-        
-        if svm_fn_total > 0 and cnn_fn_total > 0:
-            p1 = svm_metrics['fn'] / svm_fn_total
-            p2 = cnn_metrics['fn'] / cnn_fn_total
-            
-            p_pool = (svm_metrics['fn'] + cnn_metrics['fn']) / (svm_fn_total + cnn_fn_total)
-            se = np.sqrt(p_pool * (1 - p_pool) * (1/svm_fn_total + 1/cnn_fn_total))
-            z_fnr = (p1 - p2) / se if se > 0 else 0
-            p_value_fnr = 2 * (1 - stats.norm.cdf(abs(z_fnr)))
-            
-            print(f"\nFalse Negative Rate:")
-            print(f"  SVM FNR: {p1:.4f}")
-            print(f"  CNN FNR: {p2:.4f}")
-            print(f"  z-statistic: {z_fnr:.4f}")
-            print(f"  p-value: {p_value_fnr:.6f}")
-
-
-# ============================================================================
-# SECTION 3: CONSENSUS ANALYSIS
-# ============================================================================
-
-class ConsensusAnalysis:
-    """Analyze agreement between models"""
-    
-    def __init__(self, svm_preds, cnn_preds, y_true):
-        self.svm_preds = svm_preds
-        self.cnn_preds = cnn_preds
-        self.y_true = y_true
-        
-    def calculate_agreement(self):
-        """Calculate Cohen's kappa and agreement percentage"""
-        from sklearn.metrics import cohen_kappa_score
-        
-        agreement = (self.svm_preds == self.cnn_preds).sum() / len(self.svm_preds)
-        kappa = cohen_kappa_score(self.svm_preds, self.cnn_preds)
-        
-        print("\n" + "="*80)
-        print("MODEL CONSENSUS ANALYSIS")
-        print("="*80)
-        
-        print(f"\nAgreement Statistics:")
-        print(f"  Agreement rate: {agreement:.4f} ({agreement*100:.2f}%)")
-        print(f"  Cohen's Kappa: {kappa:.4f}")
-        
-        if kappa >= 0.81:
-            print(f"  Interpretation: Almost Perfect Agreement")
-        elif kappa >= 0.61:
-            print(f"  Interpretation: Substantial Agreement")
-        elif kappa >= 0.41:
-            print(f"  Interpretation: Moderate Agreement")
-        elif kappa >= 0.21:
-            print(f"  Interpretation: Fair Agreement")
+        # Interpretation
+        if p_value < 0.05:
+            result = "Models have SIGNIFICANTLY different error patterns"
         else:
-            print(f"  Interpretation: Slight Agreement")
+            result = "Models have similar error patterns"
+            
+        print(f"Result: {result}")
         
-        # Analyze disagreements
-        disagreement = self.svm_preds != self.cnn_preds
-        disagree_indices = np.where(disagreement)[0]
-        
-        print(f"\nDisagreement Analysis:")
-        print(f"  Total disagreements: {len(disagree_indices)} ({(1-agreement)*100:.2f}%)")
-        
-        # Categorize disagreements
-        svm_correct_cnn_wrong = (self.svm_preds[disagreement] == self.y_true[disagreement]).sum()
-        cnn_correct_svm_wrong = (self.cnn_preds[disagreement] == self.y_true[disagreement]).sum()
-        
-        print(f"  SVM correct, CNN wrong: {svm_correct_cnn_wrong}")
-        print(f"  CNN correct, SVM wrong: {cnn_correct_svm_wrong}")
-        
-        return {
-            'agreement': agreement,
-            'kappa': kappa,
-            'disagreements': len(disagree_indices),
-            'svm_better': svm_correct_cnn_wrong,
-            'cnn_better': cnn_correct_svm_wrong
+        self.results['mcnemars_test'] = {
+            'svm_cnn_incorrect': b,
+            'cnn_svm_incorrect': c,
+            'mcnemar_statistic': mcnemar_stat,
+            'p_value': p_value,
+            'result': result
         }
-
-
-# ============================================================================
-# MAIN COMPARISON FUNCTION
-# ============================================================================
-
-def run_advanced_comparison():
-    """Run comprehensive model comparison"""
-    print("\n" + "="*80)
-    print("ADVANCED SVM vs CNN COMPARISON WITH STATISTICAL SIGNIFICANCE")
-    print("="*80)
+        
+        return self.results['mcnemars_test']
     
+    def two_proportion_z_test(self, svm_predictions, cnn_predictions):
+        """Two-proportion z-test for FPR and FNR comparison"""
+        print("\n3. TWO-PROPORTION Z-TEST (FPR/FNR Comparison)")
+        print("-" * 40)
+        
+        # Calculate confusion matrices
+        svm_cm = confusion_matrix(self.y_test, svm_predictions)
+        cnn_cm = confusion_matrix(self.y_test, cnn_predictions)
+        
+        # Calculate rates
+        def calculate_rates(cm):
+            tn, fp, fn, tp = cm.ravel()
+            fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+            fnr = fn / (fn + tp) if (fn + tp) > 0 else 0
+            return fpr, fnr, tn, fp, fn, tp
+        
+        svm_fpr, svm_fnr, svm_tn, svm_fp, svm_fn, svm_tp = calculate_rates(svm_cm)
+        cnn_fpr, cnn_fnr, cnn_tn, cnn_fp, cnn_fn, cnn_tp = calculate_rates(cnn_cm)
+        
+        print(f"SVM - FPR: {svm_fpr:.4f}, FNR: {svm_fnr:.4f}")
+        print(f"CNN - FPR: {cnn_fpr:.4f}, FNR: {cnn_fnr:.4f}")
+        
+        # Two-proportion z-test for FPR
+        n1_svm = svm_fp + svm_tn
+        n2_cnn = cnn_fp + cnn_tn
+        
+        if n1_svm > 0 and n2_cnn > 0:
+            p1 = svm_fpr
+            p2 = cnn_fpr
+            n1 = n1_svm
+            n2 = n2_cnn
+            
+            p_pooled = (svm_fp + cnn_fp) / (n1 + n2)
+            se = np.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+            
+            if se > 0:
+                z_fpr = (p1 - p2) / se
+                p_value_fpr = 2 * (1 - norm.cdf(abs(z_fpr)))
+            else:
+                z_fpr = 0
+                p_value_fpr = 1.0
+        else:
+            z_fpr = 0
+            p_value_fpr = 1.0
+        
+        # Two-proportion z-test for FNR
+        n1_svm = svm_fn + svm_tp
+        n2_cnn = cnn_fn + cnn_tp
+        
+        if n1_svm > 0 and n2_cnn > 0:
+            p1 = svm_fnr
+            p2 = cnn_fnr
+            n1 = n1_svm
+            n2 = n2_cnn
+            
+            p_pooled = (svm_fn + cnn_fn) / (n1 + n2)
+            se = np.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+            
+            if se > 0:
+                z_fnr = (p1 - p2) / se
+                p_value_fnr = 2 * (1 - norm.cdf(abs(z_fnr)))
+            else:
+                z_fnr = 0
+                p_value_fnr = 1.0
+        else:
+            z_fnr = 0
+            p_value_fnr = 1.0
+        
+        print(f"FPR Z-test: z={z_fpr:.4f}, p={p_value_fpr:.4f}")
+        print(f"FNR Z-test: z={z_fnr:.4f}, p={p_value_fnr:.4f}")
+        
+        # Interpretation
+        if p_value_fpr < 0.05:
+            fpr_result = "SIGNIFICANT difference in FPR"
+        else:
+            fpr_result = "No significant difference in FPR"
+            
+        if p_value_fnr < 0.05:
+            fnr_result = "SIGNIFICANT difference in FNR"
+        else:
+            fnr_result = "No significant difference in FNR"
+            
+        print(f"FPR Result: {fpr_result}")
+        print(f"FNR Result: {fnr_result}")
+        
+        self.results['two_proportion_z_test'] = {
+            'svm_fpr': svm_fpr,
+            'svm_fnr': svm_fnr,
+            'cnn_fpr': cnn_fpr,
+            'cnn_fnr': cnn_fnr,
+            'z_fpr': z_fpr,
+            'p_value_fpr': p_value_fpr,
+            'z_fnr': z_fnr,
+            'p_value_fnr': p_value_fnr,
+            'fpr_result': fpr_result,
+            'fnr_result': fnr_result
+        }
+        
+        return self.results['two_proportion_z_test']
+    
+    def cohens_kappa(self, svm_predictions, cnn_predictions):
+        """Cohen's Kappa for inter-rater agreement"""
+        print("\n4. COHEN'S KAPPA (Inter-rater Agreement)")
+        print("-" * 40)
+        
+        # Calculate observed agreement
+        observed_agreement = np.mean(svm_predictions == cnn_predictions)
+        
+        # Calculate expected agreement
+        svm_probs = np.bincount(svm_predictions) / len(svm_predictions)
+        cnn_probs = np.bincount(cnn_predictions) / len(cnn_predictions)
+        expected_agreement = np.sum(svm_probs * cnn_probs)
+        
+        # Calculate Cohen's Kappa
+        if (1 - expected_agreement) > 0:
+            kappa = (observed_agreement - expected_agreement) / (1 - expected_agreement)
+        else:
+            kappa = 0
+        
+        # Standard error of kappa
+        n = len(svm_predictions)
+        se_kappa = np.sqrt(observed_agreement * (1 - observed_agreement) / (n * (1 - expected_agreement)**2))
+        
+        # 95% confidence interval
+        z_critical = 1.96
+        kappa_ci_lower = kappa - z_critical * se_kappa
+        kappa_ci_upper = kappa + z_critical * se_kappa
+        
+        print(f"Observed Agreement: {observed_agreement:.4f}")
+        print(f"Expected Agreement: {expected_agreement:.4f}")
+        print(f"Cohen's Kappa: {kappa:.4f}")
+        print(f"95% CI: [{kappa_ci_lower:.4f}, {kappa_ci_upper:.4f}]")
+        
+        # Interpretation
+        if kappa < 0:
+            agreement_level = "Poor"
+        elif kappa < 0.20:
+            agreement_level = "Slight"
+        elif kappa < 0.40:
+            agreement_level = "Fair"
+        elif kappa < 0.60:
+            agreement_level = "Moderate"
+        elif kappa < 0.80:
+            agreement_level = "Substantial"
+        else:
+            agreement_level = "Almost Perfect"
+            
+        print(f"Agreement Level: {agreement_level}")
+        
+        self.results['cohens_kappa'] = {
+            'observed_agreement': observed_agreement,
+            'expected_agreement': expected_agreement,
+            'kappa': kappa,
+            'ci_lower': kappa_ci_lower,
+            'ci_upper': kappa_ci_upper,
+            'agreement_level': agreement_level
+        }
+        
+        return self.results['cohens_kappa']
+    
+    def run_all_tests(self):
+        """Run all statistical tests"""
+        print("\n" + "="*60)
+        print("RUNNING ALL STATISTICAL TESTS")
+        print("="*60)
+        
+        # Get predictions
+        print("\nGetting model predictions...")
+        svm_predictions, svm_probabilities = self.get_svm_predictions(self.X_test)
+        cnn_predictions, cnn_probabilities = self.get_cnn_predictions(self.X_test)
+        
+        # Calculate individual accuracies
+        svm_accuracy = accuracy_score(self.y_test, svm_predictions)
+        cnn_accuracy = accuracy_score(self.y_test, cnn_predictions)
+        
+        print(f"\nSVM Accuracy: {svm_accuracy:.4f}")
+        print(f"CNN Accuracy: {cnn_accuracy:.4f}")
+        
+        # Run all tests
+        self.paired_t_test(np.array([svm_accuracy]), np.array([cnn_accuracy]))
+        self.mcnemars_test(svm_predictions, cnn_predictions)
+        self.two_proportion_z_test(svm_predictions, cnn_predictions)
+        self.cohens_kappa(svm_predictions, cnn_predictions)
+        
+        return self.results
+
+# ===== MAIN EXECUTION =====
+
+def main():
+    # Load models and data
     print("\nLoading models and data...")
     
-    # Load SVM
     try:
+        # Load SVM pipeline
         svm_pipeline = joblib.load("models/svm_esc50_pipeline.pkl")
-        train_test_data = joblib.load("models/train_test_split_esc50.pkl")
         print("✓ SVM model loaded")
-    except:
-        print("✗ SVM model not found. Please train SVM first (python train_ml.py)")
+    except FileNotFoundError:
+        print("✗ SVM model not found. Please run train_ml.py first.")
         return
     
-    # Load CNN
     try:
+        # Load CNN model
+        from train_cnn import SpectrogramCNN
         cnn_model = SpectrogramCNN().to(device)
         cnn_model.load_state_dict(torch.load("models/cnn_spectrogram.pth", map_location=device))
         cnn_model.eval()
         print("✓ CNN model loaded")
-    except:
-        print("✗ CNN model not found. Please train CNN first (python train_cnn.py)")
+    except FileNotFoundError:
+        print("✗ CNN model not found. Please run train_cnn.py first.")
         return
     
     # Load test data
-    X_test = train_test_data['X_test']
-    y_test = train_test_data['y_test']
-    
-    # Convert labels to numeric
-    y_test_numeric = (y_test == 'scream').astype(int) if isinstance(y_test[0], str) else y_test
-    
-    print(f"✓ Data loaded: {len(X_test)} test samples")
-    
-    # ============ SVM PREDICTIONS ============
-    print("\nGenerating SVM predictions...")
-    svm_preds = svm_pipeline.predict(X_test)
-    svm_probas = svm_pipeline.predict_proba(X_test)[:, 1]
-    print(f"✓ SVM predictions generated")
-    
-    # ============ CNN PREDICTIONS ============
-    print("Generating CNN predictions...")
-    cnn_preds = []
-    cnn_probas = []
-    
-    with torch.no_grad():
-        for i in range(0, len(X_test), 32):
-            batch_X = X_test.iloc[i:i+32].values
-            
-            # Reshape for CNN (batch_size, 1, 128, 128)
-            batch_X = torch.FloatTensor(batch_X).reshape(-1, 1, 128, 128).to(device)
-            
-            outputs = cnn_model(batch_X)
-            probas = torch.sigmoid(outputs).cpu().numpy().flatten()
-            preds = (probas > 0.5).astype(int)
-            
-            cnn_probas.extend(probas)
-            cnn_preds.extend(preds)
-    
-    cnn_preds = np.array(cnn_preds)
-    cnn_probas = np.array(cnn_probas)
-    print(f"✓ CNN predictions generated")
-    
-    # ============ COMPARISON ============
-    comparison = ModelComparison(y_test_numeric, svm_preds, svm_probas, cnn_preds, cnn_probas)
-    
-    # Print comparison table
-    svm_metrics, cnn_metrics = comparison.print_comparison_table()
-    
-    # Statistical tests
-    t_test_result = comparison.paired_t_test()
-    mcnemar_result = comparison.mcnemar_test()
-    comparison.proportions_test()
-    
-    # Consensus analysis
-    consensus = ConsensusAnalysis(svm_preds, cnn_preds, y_test_numeric)
-    consensus_result = consensus.calculate_agreement()
-    
-    # ============ SAVE RESULTS ============
-    print("\n" + "="*80)
-    print("SAVING COMPARISON RESULTS")
-    print("="*80)
-    
-    results = {
-        'svm_metrics': svm_metrics,
-        'cnn_metrics': cnn_metrics,
-        't_test': t_test_result,
-        'mcnemar_test': mcnemar_result,
-        'consensus': consensus_result,
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    # Convert to JSON-serializable
-    def convert_types(obj):
-        if isinstance(obj, (np.integer, np.floating, np.bool_)):
-            return obj.item()
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, dict):
-            return {k: convert_types(v) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple)):
-            return [convert_types(item) for item in obj]
-        return obj
-    
-    results = convert_types(results)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Save JSON
-    json_path = f"models/svm_cnn_comparison_{timestamp}.json"
-    with open(json_path, 'w') as f:
-        json.dump(results, f, indent=2)
-    print(f"\n✓ Results saved to {json_path}")
-    
-    # Save text report
-    report_path = f"models/svm_cnn_comparison_report_{timestamp}.txt"
-    with open(report_path, 'w') as f:
-        f.write("="*80 + "\n")
-        f.write("SVM vs CNN STATISTICAL COMPARISON REPORT\n")
-        f.write(f"Generated: {datetime.now()}\n")
-        f.write("="*80 + "\n")
+    try:
+        # Load CNN test data
+        X_test_cnn = np.load("data/cnn_spectrograms.npy")
+        y_test_cnn = np.load("data/cnn_labels.npy")
         
-        f.write("\nPAIRED T-TEST RESULTS:\n")
-        f.write(f"  SVM Accuracy: {t_test_result['svm_accuracy']:.4f}\n")
-        f.write(f"  CNN Accuracy: {t_test_result['cnn_accuracy']:.4f}\n")
-        f.write(f"  Difference: {t_test_result['difference']:+.4f}\n")
-        f.write(f"  p-value: {t_test_result['p_value']:.6f}\n")
-        f.write(f"  Significant: {'YES' if t_test_result['significant'] else 'NO'}\n")
+        # Load SVM test data
+        train_test_data = joblib.load("models/train_test_split_esc50.pkl")
+        X_test_svm = train_test_data['X_test']
+        y_test_svm = train_test_data['y_test']
         
-        if mcnemar_result:
-            f.write("\nMcNEMAR'S TEST RESULTS:\n")
-            f.write(f"  χ² statistic: {mcnemar_result.get('chi2_statistic', 'N/A')}\n")
-            f.write(f"  p-value: {mcnemar_result.get('p_value', 'N/A')}\n")
+        print(f"✓ Test data loaded")
+        print(f"  - SVM test samples: {len(X_test_svm)}")
+        print(f"  - CNN test samples: {len(X_test_cnn)}")
         
-        f.write("\nCONSENSUS:\n")
-        f.write(f"  Agreement: {consensus_result['agreement']:.4f}\n")
-        f.write(f"  Cohen's Kappa: {consensus_result['kappa']:.4f}\n")
+    except FileNotFoundError as e:
+        print(f"✗ Test data not found: {e}")
+        print("Please ensure you have run the training scripts first.")
+        return
     
-    print(f"✓ Report saved to {report_path}")
-
+    # Run statistical comparison
+    print("\nRunning statistical comparison...")
+    
+    # For this comparison, we'll use a subset to ensure balanced comparison
+    min_samples = min(len(X_test_svm), len(X_test_cnn))
+    
+    # Take random subsets for fair comparison
+    np.random.seed(42)
+    svm_indices = np.random.choice(len(X_test_svm), min_samples, replace=False)
+    cnn_indices = np.random.choice(len(X_test_cnn), min_samples, replace=False)
+    
+    X_test_svm_balanced = X_test_svm[svm_indices]
+    y_test_balanced = y_test_svm[svm_indices]
+    X_test_cnn_balanced = X_test_cnn[cnn_indices]
+    
+    # Convert CNN data to tensor
+    X_test_cnn_tensor = torch.FloatTensor(X_test_cnn_balanced).to(device)
+    
+    # Create comparison object
+    comparator = StatisticalModelComparison(
+        svm_pipeline, cnn_model, 
+        X_test_svm_balanced, y_test_balanced, device
+    )
+    
+    # Run all tests
+    results = comparator.run_all_tests()
+    
+    # Save results
+    print("\nSaving results...")
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    results_file = f"models/svm_cnn_comparison_{timestamp}.json"
+    
+    with open(results_file, 'w') as f:
+        json.dump(results, f, indent=2, default=str)
+    
+    print(f"✓ Results saved to {results_file}")
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("STATISTICAL COMPARISON SUMMARY")
+    print("="*60)
+    
+    if 'paired_t_test' in results and results['paired_t_test']:
+        t_test = results['paired_t_test']
+        print(f"Paired t-test: {t_test['significance']} (p={t_test['p_value']:.4f})")
+        print(f"Effect size: {t_test['effect_size']} (Cohen's d={t_test['cohens_d']:.4f})")
+    
+    if 'mcnemars_test' in results and results['mcnemars_test']:
+        mcnemar = results['mcnemars_test']
+        print(f"McNemar's test: {mcnemar['result']} (p={mcnemar['p_value']:.4f})")
+    
+    if 'cohens_kappa' in results and results['cohens_kappa']:
+        kappa = results['cohens_kappa']
+        print(f"Cohen's Kappa: {kappa['agreement_level']} (κ={kappa['kappa']:.4f})")
+    
+    print("\n✓ Statistical comparison complete!")
 
 if __name__ == "__main__":
-    run_advanced_comparison()
+    main()

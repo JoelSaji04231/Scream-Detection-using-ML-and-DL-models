@@ -1,190 +1,267 @@
-import pandas as pd
+"""
+CNN Inference Module
+Real-time scream detection using trained CNN model
+"""
+
 import numpy as np
 import librosa
-import joblib
-import sounddevice as sd
-from scipy.io.wavfile import write
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import warnings
+import joblib
 import time
+import warnings
 warnings.filterwarnings('ignore')
 
-# Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using device: {device}")
+# Import the CNN architecture from train_cnn
+from train_cnn import SpectrogramCNN
 
-# ===== DEFINE CNN MODEL ARCHITECTURE (must match dl.py) =====
-class SpectrogramCNN(nn.Module):
-    def __init__(self):
-        super(SpectrogramCNN, self).__init__()
+class CNNInference:
+    def __init__(self, model_path="models/cnn_spectrogram.pth", device='cpu'):
+        """Initialize CNN inference with trained model"""
+        self.model_path = model_path
+        self.device = device
+        self.model = None
+        self.is_loaded = False
         
-        # First convolutional block
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.pool1 = nn.MaxPool2d(2, 2)
-        self.dropout1 = nn.Dropout2d(0.25)
+        # Audio processing parameters
+        self.sample_rate = 22050
+        self.duration = 3.0
+        self.n_mels = 128
+        self.n_fft = 2048
+        self.hop_length = 512
+        self.n_mels = 128
         
-        # Second convolutional block
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.dropout2 = nn.Dropout2d(0.25)
-        
-        # Third convolutional block
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.pool3 = nn.MaxPool2d(2, 2)
-        self.dropout3 = nn.Dropout2d(0.25)
-        
-        # Fourth convolutional block
-        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
-        self.pool4 = nn.MaxPool2d(2, 2)
-        self.dropout4 = nn.Dropout2d(0.25)
-        
-        # Calculate size after conv layers (128x128 -> 64 -> 32 -> 16 -> 8)
-        self.fc1 = nn.Linear(256 * 8 * 8, 512)
-        self.bn5 = nn.BatchNorm1d(512)
-        self.dropout5 = nn.Dropout(0.5)
-        
-        self.fc2 = nn.Linear(512, 256)
-        self.bn6 = nn.BatchNorm1d(256)
-        self.dropout6 = nn.Dropout(0.5)
-        
-        self.fc3 = nn.Linear(256, 1)
+        self.load_model()
     
-    def forward(self, x):
-        # Conv blocks
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.dropout1(x)
-        
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = self.dropout2(x)
-        
-        x = self.pool3(F.relu(self.bn3(self.conv3(x))))
-        x = self.dropout3(x)
-        
-        x = self.pool4(F.relu(self.bn4(self.conv4(x))))
-        x = self.dropout4(x)
-        
-        # Flatten
-        x = x.view(x.size(0), -1)
-        
-        # Dense layers
-        x = F.relu(self.bn5(self.fc1(x)))
-        x = self.dropout5(x)
-        
-        x = F.relu(self.bn6(self.fc2(x)))
-        x = self.dropout6(x)
-        
-        x = self.fc3(x)
-        return x
-
-
-# Load the trained CNN model (BEST MODEL: CNN-Spectrogram)
-print("Loading trained CNN model...")
-cnn_model = SpectrogramCNN().to(device)
-cnn_model.load_state_dict(torch.load("models/cnn_spectrogram.pth", map_location=device))
-cnn_model.eval()
-print("CNN Spectrogram model loaded successfully!")
-
-# Load label encoder
-label_encoder = joblib.load("models/cnn_spec_label_encoder.pkl")
-print(f"Label encoding: {dict(enumerate(label_encoder.classes_))}")
-
-
-def clean_audio(y, sr):
-    """
-    Clean audio data before feature extraction
-    - Remove silence
-    - Normalize amplitude
-    - Handle NaN and Inf values
-    """
-    # Remove leading and trailing silence
-    y_trimmed, _ = librosa.effects.trim(y, top_db=20)
+    def load_model(self):
+        """Load trained CNN model"""
+        try:
+            self.model = SpectrogramCNN().to(self.device)
+            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+            self.model.eval()
+            self.is_loaded = True
+            print(f"✓ CNN model loaded from {self.model_path}")
+        except FileNotFoundError:
+            print(f"✗ Model file not found: {self.model_path}")
+            print("Please run train_cnn.py first to train the model")
+            self.is_loaded = False
+        except Exception as e:
+            print(f"✗ Error loading model: {e}")
+            self.is_loaded = False
     
-    # Normalize audio to [-1, 1] range
-    if np.max(np.abs(y_trimmed)) > 0:
-        y_normalized = y_trimmed / np.max(np.abs(y_trimmed))
-    else:
-        y_normalized = y_trimmed
+    def clean_audio(self, audio):
+        """Clean audio signal"""
+        # Remove silence
+        audio, _ = librosa.effects.trim(audio, top_db=20)
+        
+        # Normalize
+        audio = librosa.util.normalize(audio)
+        
+        # Ensure minimum length
+        target_length = int(self.duration * self.sample_rate)
+        if len(audio) < target_length:
+            audio = np.pad(audio, (0, target_length - len(audio)), mode='constant')
+        else:
+            audio = audio[:target_length]
+        
+        return audio
     
-    # Handle NaN and Inf values
-    y_cleaned = np.nan_to_num(y_normalized, nan=0.0, posinf=1.0, neginf=-1.0)
-    
-    # Ensure we have valid audio data
-    if len(y_cleaned) == 0:
-        # If trimming removed everything, use original normalized audio
-        y_cleaned = np.nan_to_num(y / (np.max(np.abs(y)) + 1e-8), nan=0.0, posinf=1.0, neginf=-1.0)
-    
-    return y_cleaned
-
-
-def extract_spectrogram(file_path, n_fft=2048, hop_length=512, target_shape=(128, 128)):
-    """Extract spectrogram from audio file with data cleaning (matches training)"""
-    try:
-        # Load audio
-        y, sr = librosa.load(file_path, sr=22050)
+    def generate_spectrogram(self, audio):
+        """Generate mel-spectrogram from audio"""
+        # Generate mel-spectrogram
+        mel_spec = librosa.feature.melspectrogram(
+            y=audio, 
+            sr=self.sample_rate, 
+            n_fft=self.n_fft, 
+            hop_length=self.hop_length, 
+            n_mels=self.n_mels
+        )
         
-        # CRITICAL: Clean audio BEFORE generating spectrogram (same as training)
-        y_clean = clean_audio(y, sr)
-        
-        # Compute STFT (Short-Time Fourier Transform)
-        stft = librosa.stft(y_clean, n_fft=n_fft, hop_length=hop_length)
-        
-        # Convert to magnitude spectrogram
-        spec = np.abs(stft)
-        
-        # Convert to log scale (dB)
-        spec_db = librosa.amplitude_to_db(spec, ref=np.max)
-        
-        # Resize to target shape
-        if spec_db.shape != target_shape:
-            # Use librosa's resize function for better quality
-            import scipy.ndimage
-            zoom_factors = (target_shape[0] / spec_db.shape[0], target_shape[1] / spec_db.shape[1])
-            spec_db = scipy.ndimage.zoom(spec_db, zoom_factors, order=1)
+        # Convert to log scale
+        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
         
         # Normalize to [0, 1]
-        spec_normalized = (spec_db - spec_db.min()) / (spec_db.max() - spec_db.min() + 1e-8)
+        mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
         
-        return spec_normalized
+        # Ensure consistent shape (128, 129)
+        target_shape = (self.n_mels, 129)
+        if mel_spec_norm.shape != target_shape:
+            # Pad or truncate as needed
+            if mel_spec_norm.shape[1] < target_shape[1]:
+                pad_width = target_shape[1] - mel_spec_norm.shape[1]
+                mel_spec_norm = np.pad(mel_spec_norm, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                mel_spec_norm = mel_spec_norm[:, :target_shape[1]]
+        
+        return mel_spec_norm
     
-    except Exception as e:
-        print(f"Error processing {file_path}: {e}")
-        return None
+    def predict_from_file(self, audio_file):
+        """Predict from audio file"""
+        if not self.is_loaded:
+            return None, None, "Model not loaded"
+        
+        try:
+            # Load audio
+            audio, sr = librosa.load(audio_file, sr=self.sample_rate, duration=self.duration)
+            audio = self.clean_audio(audio)
+            
+            # Generate spectrogram
+            spectrogram = self.generate_spectrogram(audio)
+            
+            # Prepare input tensor
+            input_tensor = torch.FloatTensor(spectrogram).unsqueeze(0).unsqueeze(0).to(self.device)
+            
+            # Predict
+            start_time = time.time()
+            with torch.no_grad():
+                outputs = self.model(input_tensor)
+                probabilities = F.softmax(outputs, dim=1)
+                prediction = torch.argmax(outputs, dim=1)
+            inference_time = (time.time() - start_time) * 1000  # ms
+            
+            # Get results
+            predicted_class = prediction.item()
+            confidence = probabilities[0][predicted_class].item()
+            
+            # Convert to label
+            if predicted_class == 0:
+                predicted_label = "non_scream"
+            else:
+                predicted_label = "scream"
+            
+            return predicted_label, confidence, inference_time
+            
+        except Exception as e:
+            return None, None, f"Error processing audio: {str(e)}"
+    
+    def predict_from_audio(self, audio, sr):
+        """Predict from audio array"""
+        if not self.is_loaded:
+            return None, None, "Model not loaded"
+        
+        try:
+            # Resample if necessary
+            if sr != self.sample_rate:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=self.sample_rate)
+            
+            audio = self.clean_audio(audio)
+            
+            # Generate spectrogram
+            spectrogram = self.generate_spectrogram(audio)
+            
+            # Prepare input tensor
+            input_tensor = torch.FloatTensor(spectrogram).unsqueeze(0).unsqueeze(0).to(self.device)
+            
+            # Predict
+            start_time = time.time()
+            with torch.no_grad():
+                outputs = self.model(input_tensor)
+                probabilities = F.softmax(outputs, dim=1)
+                prediction = torch.argmax(outputs, dim=1)
+            inference_time = (time.time() - start_time) * 1000  # ms
+            
+            # Get results
+            predicted_class = prediction.item()
+            confidence = probabilities[0][predicted_class].item()
+            
+            # Convert to label
+            if predicted_class == 0:
+                predicted_label = "non_scream"
+            else:
+                predicted_label = "scream"
+            
+            return predicted_label, confidence, inference_time
+            
+        except Exception as e:
+            return None, None, f"Error processing audio: {str(e)}"
+    
+    def batch_predict(self, audio_files):
+        """Batch prediction for multiple files"""
+        results = []
+        
+        for audio_file in audio_files:
+            label, confidence, inference_time = self.predict_from_file(audio_file)
+            results.append({
+                'file': audio_file,
+                'prediction': label,
+                'confidence': confidence,
+                'inference_time_ms': inference_time
+            })
+        
+        return results
+    
+    def get_model_info(self):
+        """Get model information"""
+        if not self.is_loaded:
+            return {"error": "Model not loaded"}
+        
+        # Count model parameters
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        
+        return {
+            'model_type': 'CNN',
+            'architecture': 'SpectrogramCNN',
+            'device': self.device,
+            'total_parameters': total_params,
+            'trainable_parameters': trainable_params,
+            'sample_rate': self.sample_rate,
+            'duration': self.duration,
+            'input_shape': f"(1, {self.n_mels}, 129)"
+        }
 
+# ===== MAIN EXECUTION =====
 
-def quick_predict(file_path):
-    """Predict scream/non-scream from an audio file"""
+def test_inference():
+    """Test the CNN inference module"""
+    print("Testing CNN Inference Module")
+    print("="*50)
     
-    start_time = time.time()
+    # Determine device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
     
-    # Extract spectrogram
-    spec = extract_spectrogram(file_path)
-    if spec is None:
-        print(f"Error processing {file_path}")
-        return None
+    # Initialize inference
+    inference = CNNInference(device=device)
     
-    # Add batch and channel dimensions: (1, 1, height, width)
-    spec_tensor = torch.FloatTensor(spec).unsqueeze(0).unsqueeze(0).to(device)
+    if not inference.is_loaded:
+        print("✗ Model loading failed")
+        return
     
-    # Make prediction
-    with torch.no_grad():
-        output = cnn_model(spec_tensor)
-        probability = torch.sigmoid(output).item()
-        prediction = 1 if probability > 0.5 else 0
+    # Get model info
+    model_info = inference.get_model_info()
+    print(f"Model Type: {model_info['model_type']}")
+    print(f"Device: {model_info['device']}")
+    print(f"Parameters: {model_info['total_parameters']:,}")
+    print(f"Input Shape: {model_info['input_shape']}")
     
-    prediction_time = time.time() - start_time
+    # Test with sample audio (if available)
+    import glob
     
-    result = {
-        'file': file_path,
-        'prediction': 'SCREAM' if prediction == 1 else 'NON-SCREAM',
-        'confidence': probability if prediction == 1 else (1 - probability),
-        'scream_probability': probability,
-        'prediction_time': prediction_time
-    }
+    # Look for test audio files
+    test_files = []
+    test_files.extend(glob.glob("Converted_Separately/scream/*.wav")[:2])
+    test_files.extend(glob.glob("Converted_Separately/non_scream/*.wav")[:2])
     
-    return result
+    if test_files:
+        print(f"\nTesting with {len(test_files)} sample files...")
+        
+        for audio_file in test_files:
+            print(f"\nTesting: {audio_file}")
+            
+            prediction, confidence, inference_time = inference.predict_from_file(audio_file)
+            
+            if prediction:
+                print(f"Prediction: {prediction}")
+                print(f"Confidence: {confidence:.4f}")
+                print(f"Inference time: {inference_time:.2f} ms")
+            else:
+                print(f"Error: {inference_time}")
+    else:
+        print("\nNo test audio files found.")
+        print("Please ensure Converted_Separately/ directory has audio files.")
+    
+    print("\n✓ CNN inference test complete!")
+
+if __name__ == "__main__":
+    test_inference()

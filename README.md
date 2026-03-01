@@ -499,7 +499,7 @@ Tested on:
 - ✅ **Logger Stability:** Fixed `main.py` logging calls to match `PredictionLogger` signature.
 - ✅ **Improved Error Handling:** Added fallback mechanisms for missing model metadata.
 
-### v2.0 (Initial Release)
+### v2.0
 - ✅ Core ML/DL models
 - ✅ Advanced statistical analysis
 - ✅ Cross-validation and ablation studies

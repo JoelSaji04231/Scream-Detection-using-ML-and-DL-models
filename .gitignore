@@ -10,3 +10,5 @@ env.bak/
 venv.bak/
 *.csv
 !prediction_logs.csv
+
+*.npy

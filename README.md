@@ -493,7 +493,13 @@ Tested on:
 
 ## 📈 Version History
 
-### v1.0 (Current)
+### v2.1 (February 28, 2026)
+- ✅ **Inference Robustness:** Fixed `inference_svm.py` to support both dictionary and `sklearn.Pipeline` formats.
+- ✅ **CNN Fixes:** Corrected `inference_cnn.py` architecture and binary classification logic (sigmoid vs softmax).
+- ✅ **Logger Stability:** Fixed `main.py` logging calls to match `PredictionLogger` signature.
+- ✅ **Improved Error Handling:** Added fallback mechanisms for missing model metadata.
+
+### v2.0 (Initial Release)
 - ✅ Core ML/DL models
 - ✅ Advanced statistical analysis
 - ✅ Cross-validation and ablation studies
@@ -502,7 +508,7 @@ Tested on:
 
 ---
 
-**Last Updated:** February 13, 2026
+**Last Updated:** February 28, 2026
 
 **For quick start:** Read [QUICK_START.md](QUICK_START.md) (5 min read)
 

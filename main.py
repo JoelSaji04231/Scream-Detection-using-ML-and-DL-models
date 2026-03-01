@@ -90,7 +90,7 @@ def compare_models(duration=5, sample_rate=22050, temp_file="temp_audio.wav"):
             print("="*60)
         
         # Log the prediction
-        logger.log_prediction(results, audio_source="live_recording")
+        logger.log_prediction("live_recording", cnn_result, svm_result)
         
         return results
         
@@ -158,7 +158,7 @@ def predict_from_file(audio_file_path):
             print("="*60)
         
         # Log the prediction
-        logger.log_prediction(results, audio_source=audio_file_path)
+        logger.log_prediction(audio_file_path, cnn_result, svm_result)
         
         return results
         

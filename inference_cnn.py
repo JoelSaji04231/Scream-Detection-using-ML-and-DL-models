@@ -1,9 +1,78 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import librosa
 import numpy as np
 import joblib
 import time
 import os
+
+# Define the CNN architecture (must match training)
+class SpectrogramCNN(nn.Module):
+    def __init__(self):
+        super(SpectrogramCNN, self).__init__()
+        
+        # First convolutional block
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.pool1 = nn.MaxPool2d(2, 2)
+        self.dropout1 = nn.Dropout2d(0.25)
+        
+        # Second convolutional block
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.dropout2 = nn.Dropout2d(0.25)
+        
+        # Third convolutional block
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.pool3 = nn.MaxPool2d(2, 2)
+        self.dropout3 = nn.Dropout2d(0.25)
+        
+        # Fourth convolutional block
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
+        self.pool4 = nn.MaxPool2d(2, 2)
+        self.dropout4 = nn.Dropout2d(0.25)
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(256 * 8 * 8, 512)
+        self.bn5 = nn.BatchNorm1d(512)
+        self.dropout5 = nn.Dropout(0.5)
+        
+        self.fc2 = nn.Linear(512, 256)
+        self.bn6 = nn.BatchNorm1d(256)
+        self.dropout6 = nn.Dropout(0.5)
+        
+        self.fc3 = nn.Linear(256, 1)
+    
+    def forward(self, x):
+        # Conv blocks
+        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
+        x = self.dropout1(x)
+        
+        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
+        x = self.dropout2(x)
+        
+        x = self.pool3(F.relu(self.bn3(self.conv3(x))))
+        x = self.dropout3(x)
+        
+        x = self.pool4(F.relu(self.bn4(self.conv4(x))))
+        x = self.dropout4(x)
+        
+        # Flatten
+        x = x.view(x.size(0), -1)
+        
+        # Dense layers
+        x = F.relu(self.bn5(self.fc1(x)))
+        x = self.dropout5(x)
+        
+        x = F.relu(self.bn6(self.fc2(x)))
+        x = self.dropout6(x)
+        
+        x = self.fc3(x)
+        return x
 
 def create_spectrogram(audio_path, target_shape=(128, 128)):
     """Create spectrogram from audio file"""
@@ -48,30 +117,75 @@ def quick_predict(audio_path):
             return {'prediction': 'ERROR', 'confidence': 0.0, 'prediction_time': 0.0}
         
         # Load CNN model
-        cnn_model = torch.load('models/cnn_spectrogram.pth', map_location='cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        cnn_model = SpectrogramCNN().to(device)
+        
+        # Load state dict
+        if not os.path.exists('models/cnn_spectrogram.pth'):
+            return {'prediction': 'MODEL NOT FOUND', 'confidence': 0.0, 'prediction_time': 0.0}
+            
+        state_dict = torch.load('models/cnn_spectrogram.pth', map_location=device)
+        cnn_model.load_state_dict(state_dict)
         cnn_model.eval()
         
         # Prepare input
-        input_tensor = torch.FloatTensor(spectrogram).unsqueeze(0).unsqueeze(0)
+        input_tensor = torch.FloatTensor(spectrogram).unsqueeze(0).unsqueeze(0).to(device)
         
         # Make prediction
         with torch.no_grad():
             outputs = cnn_model(input_tensor)
-            probabilities = torch.softmax(outputs, dim=1)
-            confidence, predicted = torch.max(probabilities, 1)
-        
-        # Get label
-        label_encoder = joblib.load('models/cnn_spec_label_encoder.pkl')
-        prediction_label = label_encoder.inverse_transform(predicted.numpy())[0]
+            # Binary classification with 1 output (logits)
+            probability = torch.sigmoid(outputs).item()
+            
+            # Label mapping: 0 = non_scream, 1 = scream (based on check_le.py results)
+            if probability > 0.5:
+                prediction_label = "scream"
+                confidence = probability
+            else:
+                prediction_label = "non_scream"
+                confidence = 1.0 - probability
         
         prediction_time = time.time() - start_time
         
         return {
             'prediction': prediction_label.upper(),
-            'confidence': confidence.item(),
-            'prediction_time': prediction_time
+            'confidence': float(confidence),
+            'prediction_time': float(prediction_time)
         }
         
     except Exception as e:
         print(f"CNN prediction error: {e}")
         return {'prediction': 'ERROR', 'confidence': 0.0, 'prediction_time': 0.0}
+
+def test_inference():
+    """Test the CNN inference module"""
+    print("Testing CNN Inference Module")
+    print("="*50)
+    
+    # Test with sample audio (if available)
+    import glob
+    
+    # Look for test audio files
+    test_files = []
+    test_files.extend(glob.glob("Converted_Separately/scream/*.wav")[:2])
+    test_files.extend(glob.glob("Converted_Separately/non_scream/*.wav")[:2])
+    
+    if test_files:
+        print(f"\nTesting with {len(test_files)} sample files...")
+        
+        for audio_file in test_files:
+            print(f"\nTesting: {audio_file}")
+            
+            result = quick_predict(audio_file)
+            
+            print(f"Prediction: {result['prediction']}")
+            print(f"Confidence: {result['confidence']:.4f}")
+            print(f"Prediction time: {result['prediction_time']*1000:.2f} ms")
+    else:
+        print("\nNo test audio files found.")
+        print("Please ensure Converted_Separately/ directory has audio files.")
+    
+    print("\n✓ CNN inference test complete!")
+
+if __name__ == "__main__":
+    test_inference()
